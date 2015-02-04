@@ -2,6 +2,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+#include "lossless.h"
+
 int main()
 {
 	int sock;
@@ -9,15 +11,11 @@ int main()
 
 	char buf[2048];
 
-	sock = socket(AF_INET, SOCK_DGRAM, 0);
+	struct lossless_context context;
+	lossless_connect(&context, inet_addr("127.0.0.1"), 50000);
 
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(54321);
-	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-	sendto(sock, "HELLO", 5, 0, (struct sockaddr *)&addr, sizeof(addr));
-
-	close(sock);
+	puts("send \"HELLO\"");
+	lossless_sendto(&context, "HELLO", sizeof("HELLO"));
 
 	return 0;
 }

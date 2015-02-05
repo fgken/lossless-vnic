@@ -76,6 +76,8 @@ int lossless_accept(struct lossless_context *context, uint16_t port)
 	// save lossless connection context
 	context->sock = sock;
 	context->dest_addr = dest_addr;
+	context->seq_num = 0;
+	context->ack_num = 0;
 
 	output("lossless connection is established!");
 
@@ -136,6 +138,8 @@ int lossless_connect(struct lossless_context *context, in_addr_t s_addr, uint16_
 	// save lossless connection context
 	context->sock = sock;
 	context->dest_addr = dest_addr;
+	context->seq_num = 0;
+	context->ack_num = 0;
 	
 	output("lossless connection is established!");
 
@@ -151,6 +155,8 @@ ssize_t lossless_sendto(struct lossless_context *context, void *buf, size_t len)
 	ssize_t ret;
 
 	uint32_t seq_num = 1;
+
+	// send pac
 
 	return sendto(context->sock, buf, len, 0, (struct sockaddr *)&context->dest_addr,
 			sizeof(context->dest_addr));

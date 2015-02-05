@@ -4,6 +4,8 @@
 struct lossless_context {
 	int sock;
 	struct sockaddr_in dest_addr;
+	int32_t seq_num;
+	int32_t ack_num;
 };
 
 enum {

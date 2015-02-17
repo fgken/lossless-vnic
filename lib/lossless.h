@@ -6,6 +6,9 @@ struct lossless_context {
 	struct sockaddr_in dest_addr;
 	int32_t seq_num;
 	int32_t ack_num;
+	struct list_head send_queue;
+	struct list_head recv_queue;
+
 };
 
 enum {

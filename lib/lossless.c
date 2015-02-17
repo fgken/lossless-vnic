@@ -10,9 +10,6 @@
 #include "debug.h"
 #include "list.h"
 
-struct list_head send_queue;
-struct list_head recv_queue;
-
 void lossless_init()
 {
 	list_init_head(&send_queue);

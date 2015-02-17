@@ -8,6 +8,16 @@
 #include <errno.h>
 
 #include "debug.h"
+#include "list.h"
+
+struct list_head send_queue;
+struct list_head recv_queue;
+
+void lossless_init()
+{
+	list_init_head(&send_queue);
+	list_init_head(&recv_queue);
+}
 
 int set_lossless_handshake_header(uint8_t *buf, uint8_t flag, in_addr_t ip, uint16_t port)
 {
@@ -146,64 +156,113 @@ int lossless_connect(struct lossless_context *context, in_addr_t s_addr, uint16_
 	return 0;
 }
 
+
 ssize_t lossless_sendto(struct lossless_context *context, void *buf, size_t len)
 {
-	char ll_buf[2048];
-	struct lossless_header *llhdr;
+	struct lossless_header *packet;
+	struct lossless_queue_item *item;
+	ssize_t ret = 0;
 
-	char ack_buf[16];
-	ssize_t ret;
+	packet = (struct lossless_header *)malloc(sizeof(struct lossless_header) + len);
 
-	uint32_t seq_num = 1;
+	packet->seq_num = context->seq_num;
+	packet->ack_num = context->ack_num;
+	packet->len = len;
+	memcpy(packet->data, buf, len);
 
-	// send pac
+	context->seq_num += sizeof(struct lossless_header) + len;
 
-	return sendto(context->sock, buf, len, 0, (struct sockaddr *)&context->dest_addr,
-			sizeof(context->dest_addr));
+	item = (struct lossless_queue_item *)malloc(sizeof(struct lossless_queue_item));
+	item->data = packet;
+	list_add(item->list, &send_queue);
 
-//	llhdr = (struct lossless_header *)ll_buf;
-//
-//	llhdr->seq_num = seq_num;
-//
-//	memcpy(ll_buf+sizeof(struct lossless_header), buf, len);
-//
-//	while(1) {
-//		// send
-//		ret = sendto(sockfd, ll_buf, len+sizeof(struct lossless_header), flags,
-//				dest_addr, addrlen);
-//
-//		// wait ack
-//		recv(sockfd, ack_buf, sizeof(ack_buf), 0);
-//		if (((struct lossless_header *)ack_buf)->seq_num == seq_num){
-//			seq_num++;
-//			return ret;
-//		}
-//	}
+	return ret;
+}
+
+void lossless_send_thread(void *param)
+{
+	struct list_head *pos;
+	struct lossless_queue_item *item;
+
+	while(1){
+		list_for_each(pos, &send_queue){
+			item = list_entry(pos, struct lossless_queue_item, list);
+			switch(item->send_state){
+				case SEND_STATE_WAIT_SEND:
+					sendto( context->sock,
+							item->data,
+							len,
+							0,
+							(struct sockaddr *)&context->dest_addr,
+							sizeof(context->dest_addr)
+							);
+					break;
+				case SEND_STATE_WAIT_ACK:
+					// timeout
+					item->send_state = SEND_STATE_WAIT_SEND;
+					break;
+				default:
+					break;
+			}
+		}
+
+		sleep(1);
+
+		while(1) {
+			item = list_entry(send_queue->next, struct lossless_queue_item, list);
+			if(item->send_state == SEND_STATE_COMPLETE){
+				list_del(send_queue->next);
+				//free
+			}
+			else {
+				break;
+			}
+		}
+	}
 }
 
 ssize_t lossless_recv(struct lossless_context *context, void *buf, size_t len)
 {
-	char ll_buf[2048];
-	char ack_buf[16];
-	uint32_t seq_num = 1;
-	uint32_t ack_size = 20;
+	struct lossless_queue_item *item;
+	//uint32_t seq_num = 1;
+	//uint32_t ack_size = 20;
 
-	ssize_t ret;
+	ssize_t ret = 0;
 
-	return recv(context->sock, buf, len, 0);
+	while(list_empty(&recv_queue));
 
-	//while(1) {
-	//	// recv
-	//	ret = recv(sockfd, ll_buf, sizeof(ll_buf), flags);
+	item = list_entry(recv_queue->next, struct lossless_queue_item, list);
 
-	//	if (((struct lossless_header *)ll_buf)->seq_num != seq_num){
-	//		// re-send
-	//		//sendto(sockfd, 
-	//		continue;
-	//	}
+	memcpy(data, item->data->data, item->data->len);
 
-		// ack
-//		sendto(sockfd, ack_buf, sizeof(ack_size), 0);
-//	}
+	list_del(recv_queue->next);
+	free(item);
+
+	return ret;
+}
+
+void lossless_recv_thread(void *param)
+{
+	struct lossless_header *packet;
+	int len = 2000;
+
+	struct lossless_queue_item *item;
+
+	packet = (struct lossless_header *)malloc(len);
+
+	while(1){
+		recv(context->sock, packet, len, 0);
+
+		if(packet->seq_num == context->ack_num){
+			context->ack_num += packet->all_len;
+
+			// send ACK
+			item = (struct lossless_queue_item *)malloc(sizeof(struct lossless_queue_item));
+			item->data = packet;
+			list_add(&item->list, &recv_queue);
+	
+			packet = (struct lossless_header *)malloc(len);
+		}
+	}
 }
 
